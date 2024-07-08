@@ -52,24 +52,73 @@ const fs = require("node:fs/promises");
 //   console.timeEnd("writeMany");
 // })();
 
-
-// DON'T DO IT THIS WAY!!!
-// Execution Time: 288ms
-// CPU Usage: 240 MB
-// Memory Usage: 3%
+// Execution Time: 4ms
+// CPU Usage: 20.2 MB
+// Memory Usage: 0.3%
 (async () => {
   console.time("writeMany");
 
   // 1: open test.txt
-  const fileHandler = await fs.open("./test.txt", "w");
+  const fileHandler = await fs.open("./Streams/Learning/test.txt", "w");
 
   const stream = fileHandler.createWriteStream();
 
-  for (let i = 0; i < 1000000; i++) {
-    const buff = Buffer.from("victor von ", "utf-8");
-    stream.write(buff);
-  }
+  console.log(stream.writableHighWaterMark);
+  console.log(stream.writableLength);
 
-  fileHandler.close();
-  console.timeEnd("writeMany");
+  /*
+  8 bits = 1 byte
+  100 bytes = 1 kilobyte
+  1000 kilobytes = 1 megabyte
+
+  1a => 00011010
+  */
+  // const buff = Buffer.alloc(16383, "A");
+  // console.log(stream.write(buff));
+  // console.log(stream.write(Buffer.alloc(1, "A")));
+
+  // stream.on("drain", () => {
+  //   //buffer is now emptied
+  //   console.log("now safe to write more to stream");
+  // });
+  /* 
+  When the writableLength in stream gets to 16kb (~16,000 bytes)
+  the stream will write to resource
+   */
+  let i = 0;
+  const writeMany = () => {
+    const limit = 1000000;
+    while (i < limit) {
+      const buff = Buffer.from("victor von ", "utf-8");
+
+      // last write
+      if (i === limit - 1) {
+        // should not write after end bcz it marks as done
+        return stream.end(buff);
+      }
+
+      //stops loop when buffer is full
+      if (!stream.write(buff)) break;
+
+      i++;
+    }
+  };
+  writeMany();
+
+  // resume loop when stream is emptied
+  stream.on("drain", () => {
+    console.log("is draining..");
+    writeMany();
+  });
+
+  stream.on("finish", () => {
+    fileHandler.close();
+    console.timeEnd("writeMany");
+  });
 })();
+
+/**
+ * console logging in drain event shows it was called 641 times
+ * the test.txt file size is 11,007,381 bytes. Dividing file size by stream limit (16,384 bytes) validates
+ * drain events
+ */
